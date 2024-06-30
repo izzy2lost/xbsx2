@@ -72,7 +72,6 @@
     <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
     <AppxSymbolPackageEnabled>True</AppxSymbolPackageEnabled>
     <AppxPackageSigningThumbprint>B94B3359B60FB47926E980938C36C9F260560CAF</AppxPackageSigningThumbprint> <!-- Add this line -->
-</PropertyGroup>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
