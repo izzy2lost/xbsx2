@@ -1,4 +1,4 @@
-name: Windows UWP Builds
+name: XBSX2 Builder
 
 on:
   push:
@@ -48,14 +48,17 @@ jobs:
         shell: cmd
         run: |
           cd bin/resources
-          aria2c "https://github.com/PCSX2/pcsx2_patches/releases/tag/latest/download/patches.zip"
+          curl -L -o patches.zip "https://github.com/PCSX2/pcsx2_patches/releases/latest/download/patches.zip"
 
       - name: Download Dependencies
         shell: cmd
         run: |
-          aria2c -Z "https://github.com/PCSX2/pcsx2-windows-dependencies/releases/download/latest-windows-dependencies/pcsx2-windows-dependencies.7z"
+          curl -L -o pcsx2-windows-dependencies.7z "https://github.com/PCSX2/pcsx2-windows-dependencies/releases/latest/download/pcsx2-windows-dependencies.7z"
       
-      - name: Extract some files
+      - name: Extract Patches
+        run: 7z x bin/resources/patches.zip -o"bin/resources/"
+
+      - name: Extract Dependencies
         run: 7z x pcsx2-windows-dependencies.7z -o"./"
 
       - name: Build project
