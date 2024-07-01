@@ -53,7 +53,7 @@ jobs:
       - name: Download Dependencies
         shell: cmd
         run: |
-          aria2c "https://github.com/PCSX2/pcsx2-windows-dependencies/releases/download/latest-windows-dependencies/pcsx2-windows-dependencies.7z"
+          aria2c -Z "https://github.com/PCSX2/pcsx2-windows-dependencies/releases/download/latest-windows-dependencies/pcsx2-windows-dependencies.7z"
       
       - name: Extract some files
         run: 7z x pcsx2-windows-dependencies.7z -o"./"
