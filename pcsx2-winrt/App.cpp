@@ -580,7 +580,7 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView>
 
 				VMManager::SetState(VMState::Running);
 
-				MTGS::WaitForOpen();
+				GetMTGS::WaitForOpen();
 				InputManager::ReloadDevices();
 			});
 		}
@@ -613,7 +613,7 @@ struct App : implements<App, IFrameworkViewSource, IFrameworkView>
 			GameList::Refresh(false);
 			ImGuiManager::InitializeFullscreenUI();
 
-			MTGS::WaitForOpen();
+			GetMTGS::WaitForOpen();
 		}
 
 		window.Dispatcher().RunAsync(CoreDispatcherPriority::Normal, []() {
