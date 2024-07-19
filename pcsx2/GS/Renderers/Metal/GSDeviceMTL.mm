@@ -25,12 +25,25 @@ GSDevice* MakeGSDeviceMTL()
 	return new GSDeviceMTL();
 }
 
-std::vector<std::string> GetMetalAdapterList()
+std::vector<GSAdapterInfo> GetMetalAdapterList()
 { @autoreleasepool {
-	std::vector<std::string> list;
+	std::vector<GSAdapterInfo> list;
 	auto devs = MRCTransfer(MTLCopyAllDevices());
 	for (id<MTLDevice> dev in devs.Get())
-		list.push_back([[dev name] UTF8String]);
+	{
+		GSAdapterInfo ai;
+		ai.name = [[dev name] UTF8String];
+		
+		ai.max_texture_size = 8192;
+		if ([dev supportsFeatureSet:MTLFeatureSet_macOS_GPUFamily1_v1])
+			ai.max_texture_size = 16384;
+		if (@available(macOS 10.15, iOS 13.0, *))
+			if ([dev supportsFamily:MTLGPUFamilyApple3])
+				ai.max_texture_size = 16384;
+
+		ai.max_upscale_multiplier = GSGetMaxUpscaleMultiplier(ai.max_texture_size);
+		list.push_back(std::move(ai));
+	}
 	return list;
 }}
 
@@ -507,8 +520,8 @@ GSTexture* GSDeviceMTL::CreateSurface(GSTexture::Type type, int width, int heigh
 
 	MTLTextureDescriptor* desc = [MTLTextureDescriptor
 		texture2DDescriptorWithPixelFormat:fmt
-		                             width:std::max(1, std::min(width,  m_dev.features.max_texsize))
-		                            height:std::max(1, std::min(height, m_dev.features.max_texsize))
+		                             width:width
+		                            height:height
 		                         mipmapped:levels > 1];
 
 	if (levels > 1)
@@ -891,7 +904,7 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 
 	MTLPixelFormat layer_px_fmt = [m_layer pixelFormat];
 
-	m_features.broken_point_sampler = [[m_dev.dev name] containsString:@"AMD"];
+	m_features.broken_point_sampler = false;
 	m_features.vs_expand = !GSConfig.DisableVertexShaderExpand;
 	m_features.primitive_id = m_dev.features.primid;
 	m_features.texture_barrier = true;
@@ -905,6 +918,7 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 	m_features.stencil_buffer = true;
 	m_features.cas_sharpening = true;
 	m_features.test_and_sample_depth = true;
+	m_max_texture_size = m_dev.features.max_texsize;
 
 	// Init metal stuff
 	m_fn_constants = MRCTransfer([MTLFunctionConstantValues new]);
@@ -1104,6 +1118,7 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 				pdesc.depthAttachmentPixelFormat = MTLPixelFormatInvalid;
 				break;
 			case ShaderConvert::DEPTH_COPY:
+			case ShaderConvert::FLOAT32_TO_FLOAT24:
 			case ShaderConvert::RGBA8_TO_FLOAT32:
 			case ShaderConvert::RGBA8_TO_FLOAT24:
 			case ShaderConvert::RGBA8_TO_FLOAT16:
@@ -1696,7 +1711,7 @@ void GSDeviceMTL::ConvertToIndexedTexture(GSTexture* sTex, float sScale, u32 off
 	DoStretchRect(sTex, GSVector4::zero(), dTex, dRect, pipeline, false, LoadAction::DontCareIfFull, &uniform, sizeof(uniform));
 }}
 
-void GSDeviceMTL::FilteredDownsampleTexture(GSTexture* sTex, GSTexture* dTex, u32 downsample_factor, const GSVector2i& clamp_min)
+void GSDeviceMTL::FilteredDownsampleTexture(GSTexture* sTex, GSTexture* dTex, u32 downsample_factor, const GSVector2i& clamp_min, const GSVector4& dRect)
 { @autoreleasepool {
 	const ShaderConvert shader = ShaderConvert::DOWNSAMPLE_COPY;
 	id<MTLRenderPipelineState> pipeline = m_convert_pipeline[static_cast<int>(shader)];
@@ -1706,7 +1721,6 @@ void GSDeviceMTL::FilteredDownsampleTexture(GSTexture* sTex, GSTexture* dTex, u3
 	GSMTLDownsamplePSUniform uniform = { {static_cast<uint>(clamp_min.x), static_cast<uint>(clamp_min.x)}, downsample_factor,
 	  static_cast<float>(downsample_factor * downsample_factor) };
 
-	const GSVector4 dRect = GSVector4(dTex->GetRect());
 	DoStretchRect(sTex, GSVector4::zero(), dTex, dRect, pipeline, false, LoadAction::DontCareIfFull, &uniform, sizeof(uniform));
 }}
 
@@ -1847,7 +1861,6 @@ void GSDeviceMTL::MRESetHWPipelineState(GSHWDrawConfig::VSSelector vssel, GSHWDr
 		setFnConstantB(m_fn_constants, pssel.tex_is_fb,             GSMTLConstantIndex_PS_TEX_IS_FB);
 		setFnConstantB(m_fn_constants, pssel.automatic_lod,         GSMTLConstantIndex_PS_AUTOMATIC_LOD);
 		setFnConstantB(m_fn_constants, pssel.manual_lod,            GSMTLConstantIndex_PS_MANUAL_LOD);
-		setFnConstantB(m_fn_constants, pssel.point_sampler,         GSMTLConstantIndex_PS_POINT_SAMPLER);
 		setFnConstantB(m_fn_constants, pssel.region_rect,           GSMTLConstantIndex_PS_REGION_RECT);
 		setFnConstantI(m_fn_constants, pssel.scanmsk,               GSMTLConstantIndex_PS_SCANMSK);
 		auto newps = LoadShader(@"ps_main");

@@ -406,8 +406,7 @@ namespace FullscreenUI
 	static std::unique_ptr<INISettingsInterface> s_game_settings_interface;
 	static std::unique_ptr<GameList::Entry> s_game_settings_entry;
 	static std::vector<std::pair<std::string, bool>> s_game_list_directories_cache;
-	static std::vector<std::string> s_graphics_adapter_list_cache;
-	static std::vector<std::string> s_fullscreen_mode_list_cache;
+	static std::vector<GSAdapterInfo> s_graphics_adapter_list_cache;
 	static Patch::PatchInfoList s_game_patch_list;
 	static std::vector<std::string> s_enabled_game_patch_cache;
 	static Patch::PatchInfoList s_game_cheats_list;
@@ -767,7 +766,6 @@ void FullscreenUI::Shutdown(bool clear_state)
 		s_game_cheats_list = {};
 		s_enabled_game_patch_cache = {};
 		s_game_patch_list = {};
-		s_fullscreen_mode_list_cache = {};
 		s_graphics_adapter_list_cache = {};
 		s_current_game_title = {};
 		s_current_game_subtitle = {};
@@ -1263,8 +1261,9 @@ void FullscreenUI::DrawLandingWindow()
 {
 	ImVec2 menu_pos, menu_size;
 	DrawLandingTemplate(&menu_pos, &menu_size);
-	const char version_txt[] = "v2.0.7";
-
+	const char version_txt[] = "v2.0.8";
+	ImGui::PushStyleColor(ImGuiCol_Text, UIBackgroundTextColor);
+	
 	if (BeginHorizontalMenu("landing_window", menu_pos, menu_size, 4))
 	{
 		ResetFocusHere();
@@ -1428,6 +1427,7 @@ void FullscreenUI::DrawExitWindow()
 				ToggleTheme();
 
 
+			if (FloatingButton(ICON_FA_WINDOW_CLOSE, fullscreen_pos.x, 0.0f, -1.0f, -1.0f, -1.0f, 0.0f, true, g_large_font, &fullscreen_pos))
 			if (FloatingButton(ICON_FA_WINDOW_CLOSE, fullscreen_pos.x, 0.0f, -1.0f, -1.0f, -1.0f, 0.0f, true, g_large_font, &fullscreen_pos))
 				DoRequestExit();
 
@@ -2773,7 +2773,7 @@ void FullscreenUI::SwitchToGameSettings(const GameList::Entry* entry)
 
 void FullscreenUI::PopulateGraphicsAdapterList()
 {
-	GSGetAdaptersAndFullscreenModes(GSConfig.Renderer, &s_graphics_adapter_list_cache, &s_fullscreen_mode_list_cache);
+	s_graphics_adapter_list_cache = GSGetAdapterInfo(GSConfig.Renderer);
 }
 
 void FullscreenUI::PopulateGameListDirectoryCache(SettingsInterface* si)
@@ -2807,6 +2807,7 @@ void FullscreenUI::DoCopyGameSettings()
 		return;
 
 	Pcsx2Config::CopyConfiguration(s_game_settings_interface.get(), *GetEditingSettingsInterface(false));
+	Pcsx2Config::ClearInvalidPerGameConfiguration(s_game_settings_interface.get());
 
 	SetSettingsChanged(s_game_settings_interface.get());
 
@@ -3524,20 +3525,22 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 	};
 	static const char* s_resolution_options[] = {
 		FSUI_NSTR("Native (PS2)"),
-		FSUI_NSTR("1.25x Native"),
-		FSUI_NSTR("1.5x Native"),
-		FSUI_NSTR("1.75x Native"),
-		FSUI_NSTR("2x Native (~720p)"),
-		FSUI_NSTR("2.25x Native"),
-		FSUI_NSTR("2.5x Native"),
-		FSUI_NSTR("2.75x Native"),
-		FSUI_NSTR("3x Native (~1080p)"),
-		FSUI_NSTR("3.5x Native"),
-		FSUI_NSTR("4x Native (~1440p/2K)"),
-		FSUI_NSTR("5x Native (~1620p)"),
-		FSUI_NSTR("6x Native (~2160p/4K)"),
-		FSUI_NSTR("7x Native (~2520p)"),
-		FSUI_NSTR("8x Native (~2880p)"),
+		FSUI_NSTR("1.25x Native (~450px)"),
+		FSUI_NSTR("1.5x Native (~540px)"),
+		FSUI_NSTR("1.75x Native (~630px)"),
+		FSUI_NSTR("2x Native (~720px/HD)"),
+		FSUI_NSTR("2.5x Native (~900px/HD+)"),
+		FSUI_NSTR("3x Native (~1080px/FHD)"),
+		FSUI_NSTR("3.5x Native (~1260px)"),
+		FSUI_NSTR("4x Native (~1440px/QHD)"),
+		FSUI_NSTR("5x Native (~1800px/QHD+)"),
+		FSUI_NSTR("6x Native (~2160px/4K UHD)"),
+		FSUI_NSTR("7x Native (~2520px)"),
+		FSUI_NSTR("8x Native (~2880px/5K UHD)"),
+		FSUI_NSTR("9x Native (~3240px)"),
+		FSUI_NSTR("10x Native (~3600px/6K UHD)"),
+		FSUI_NSTR("11x Native (~3960px)"),
+		FSUI_NSTR("12x Native (~4320px/8K UHD)"),
 	};
 	static const char* s_resolution_values[] = {
 		"1",
@@ -3545,9 +3548,7 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		"1.5",
 		"1.75",
 		"2",
-		"2.25",
 		"2.5",
-		"2.75",
 		"3",
 		"3.5",
 		"4",
@@ -3555,6 +3556,10 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		"6",
 		"7",
 		"8",
+		"9",
+		"10",
+		"11",
+		"12",
 	};
 	static constexpr const char* s_bilinear_options[] = {
 		FSUI_NSTR("Nearest"),
@@ -3944,6 +3949,10 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 			FSUI_CSTR("Forces the use of FIFO over Mailbox presentation, i.e. double buffering instead of triple buffering. "
 					  "Usually results in worse frame pacing."),
 			"EmuCore/GS", "DisableMailboxPresentation", false);
+		/* DrawToggleSetting(bsi, FSUI_CSTR("Extended Upscaling Multipliers"),
+			FSUI_CSTR("Displays additional, very high upscaling multipliers dependent on GPU capability."),
+			"EmuCore/GS", "ExtendedUpscalingMultipliers", false); */
+		// TODO: Immplement this button properly
 		if (IsEditingGameSettings(bsi))
 		{
 			DrawIntListSetting(bsi, FSUI_CSTR("Hardware Download Mode"), FSUI_CSTR("Changes synchronization behavior for GS downloads."),
@@ -7366,6 +7375,8 @@ TRANSLATE_NOOP("FullscreenUI", "Skip Presenting Duplicate Frames");
 TRANSLATE_NOOP("FullscreenUI", "Skips displaying frames that don't change in 25/30fps games. Can improve speed, but increase input lag/make frame pacing worse.");
 TRANSLATE_NOOP("FullscreenUI", "Disable Mailbox Presentation");
 TRANSLATE_NOOP("FullscreenUI", "Forces the use of FIFO over Mailbox presentation, i.e. double buffering instead of triple buffering. Usually results in worse frame pacing.");
+TRANSLATE_NOOP("FullscreenUI", "Extended Upscaling Multipliers");
+TRANSLATE_NOOP("FullscreenUI", "Displays additional, very high upscaling multipliers dependent on GPU capability.");
 TRANSLATE_NOOP("FullscreenUI", "Hardware Download Mode");
 TRANSLATE_NOOP("FullscreenUI", "Changes synchronization behavior for GS downloads.");
 TRANSLATE_NOOP("FullscreenUI", "Allow Exclusive Fullscreen");

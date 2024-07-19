@@ -598,6 +598,7 @@ struct Pcsx2Config
 					SynchronousMTGS : 1,
 					VsyncEnable : 1,
 					DisableMailboxPresentation : 1,
+					ExtendedUpscalingMultipliers : 1,
 					PCRTCAntiBlur : 1,
 					DisableInterlaceOffset : 1,
 					PCRTCOffsets : 1,
@@ -1195,6 +1196,9 @@ struct Pcsx2Config
 
 	/// Clears all core keys from the specified interface.
 	static void ClearConfiguration(SettingsInterface* dest_si);
+
+	/// Removes keys that are not valid for per-game settings.
+	static void ClearInvalidPerGameConfiguration(SettingsInterface* si);
 };
 
 extern Pcsx2Config EmuConfig;

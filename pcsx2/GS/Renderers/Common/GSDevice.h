@@ -804,6 +804,7 @@ public:
 
 protected:
 	FeatureSupport m_features;
+	u32 m_max_texture_size = 0;
 
 	struct
 	{
@@ -888,6 +889,7 @@ public:
 	__fi u64 GetPoolMemoryUsage() const { return m_pool_memory_usage; }
 
 	__fi FeatureSupport Features() const { return m_features; }
+	__fi u32 GetMaxTextureSize() const { return m_max_texture_size; }
 
 	__fi const WindowInfo& GetWindowInfo() const { return m_window_info; }
 	__fi s32 GetWindowWidth() const { return static_cast<s32>(m_window_info.surface_width); }
@@ -990,7 +992,7 @@ public:
 	virtual void ConvertToIndexedTexture(GSTexture* sTex, float sScale, u32 offsetX, u32 offsetY, u32 SBW, u32 SPSM, GSTexture* dTex, u32 DBW, u32 DPSM) = 0;
 
 	/// Uses box downsampling to resize a texture.
-	virtual void FilteredDownsampleTexture(GSTexture* sTex, GSTexture* dTex, u32 downsample_factor, const GSVector2i& clamp_min) = 0;
+	virtual void FilteredDownsampleTexture(GSTexture* sTex, GSTexture* dTex, u32 downsample_factor, const GSVector2i& clamp_min, const GSVector4& dRect) = 0;
 
 	virtual void RenderHW(GSHWDrawConfig& config) = 0;
 

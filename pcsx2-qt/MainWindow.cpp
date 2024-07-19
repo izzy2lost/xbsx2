@@ -2572,7 +2572,7 @@ DebuggerWindow* MainWindow::getDebuggerWindow()
 void MainWindow::openDebugger()
 {
 	DebuggerWindow* dwnd = getDebuggerWindow();
-	dwnd->isVisible() ? dwnd->hide() : dwnd->show();
+	dwnd->isVisible() ? dwnd->activateWindow() : dwnd->show();
 }
 
 void MainWindow::doControllerSettings(ControllerSettingsWindow::Category category)
@@ -2664,7 +2664,7 @@ void MainWindow::setGameListEntryCoverImage(const GameList::Entry* entry)
 		return;
 
 	const QString old_filename = QString::fromStdString(GameList::GetCoverImagePathForEntry(entry));
-	const QString new_filename = QString::fromStdString(GameList::GetNewCoverImagePathForEntry(entry, filename.toUtf8().constData()));
+	const QString new_filename = QString::fromStdString(GameList::GetNewCoverImagePathForEntry(entry, filename.toUtf8().constData(), true));
 	if (new_filename.isEmpty())
 		return;
 
