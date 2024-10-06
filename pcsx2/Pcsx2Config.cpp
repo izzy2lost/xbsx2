@@ -1,6 +1,7 @@
-// SPDX-FileCopyrightText: 2002-2023 PCSX2 Dev Team
-// SPDX-License-Identifier: LGPL-3.0+
+// SPDX-FileCopyrightText: 2002-2024 PCSX2 Dev Team
+// SPDX-License-Identifier: GPL-3.0+
 
+#include "common/CocoaTools.h"
 #include "common/FileSystem.h"
 #include "common/Path.h"
 #include "common/SettingsInterface.h"
@@ -622,7 +623,8 @@ Pcsx2Config::GSOptions::GSOptions()
 	DisableFramebufferFetch = false;
 	DisableVertexShaderExpand = false;
 	SkipDuplicateFrames = false;
-	OsdShowMessages = true;
+	OsdMessagesPos = OsdOverlayPos::TopLeft;
+	OsdPerformancePos = OsdOverlayPos::TopRight;
 	OsdShowSpeed = false;
 	OsdShowFPS = false;
 	OsdShowCPU = false;
@@ -633,6 +635,10 @@ Pcsx2Config::GSOptions::GSOptions()
 	OsdShowSettings = false;
 	OsdShowInputs = false;
 	OsdShowFrameTimes = false;
+	OsdShowVersion = false;
+	OsdShowHardwareInfo = false;
+	OsdShowVideoCapture = true;
+	OsdShowInputRec = true;
 
 	HWDownloadMode = GSHardwareDownloadMode::Enabled;
 	HWSpinGPUForReadbacks = false;
@@ -702,6 +708,8 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 		OpEqu(Crop[3]) &&
 
 		OpEqu(OsdScale) &&
+		OpEqu(OsdMessagesPos) &&
+		OpEqu(OsdPerformancePos) &&
 
 		OpEqu(Renderer) &&
 		OpEqu(UpscaleMultiplier) &&
@@ -753,6 +761,7 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 
 		OpEqu(CaptureContainer) &&
 		OpEqu(VideoCaptureCodec) &&
+		OpEqu(VideoCaptureFormat) &&
 		OpEqu(VideoCaptureParameters) &&
 		OpEqu(AudioCaptureCodec) &&
 		OpEqu(AudioCaptureParameters) &&
@@ -826,7 +835,6 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapBitBool(DisableFramebufferFetch);
 	SettingsWrapBitBool(DisableVertexShaderExpand);
 	SettingsWrapBitBool(SkipDuplicateFrames);
-	SettingsWrapBitBool(OsdShowMessages);
 	SettingsWrapBitBool(OsdShowSpeed);
 	SettingsWrapBitBool(OsdShowFPS);
 	SettingsWrapBitBool(OsdShowCPU);
@@ -837,6 +845,10 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapBitBool(OsdShowSettings);
 	SettingsWrapBitBool(OsdShowInputs);
 	SettingsWrapBitBool(OsdShowFrameTimes);
+	SettingsWrapBitBool(OsdShowVersion);
+	SettingsWrapBitBool(OsdShowHardwareInfo);
+	SettingsWrapBitBool(OsdShowVideoCapture);
+	SettingsWrapBitBool(OsdShowInputRec);
 
 	SettingsWrapBitBool(HWSpinGPUForReadbacks);
 	SettingsWrapBitBool(HWSpinCPUForReadbacks);
@@ -884,6 +896,8 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapIntEnumEx(InterlaceMode, "deinterlace_mode");
 
 	SettingsWrapEntry(OsdScale);
+	SettingsWrapIntEnumEx(OsdMessagesPos, "OsdMessagesPos");
+	SettingsWrapIntEnumEx(OsdPerformancePos, "OsdPerformancePos");
 
 	SettingsWrapIntEnumEx(Renderer, "Renderer");
 	SettingsWrapEntryEx(UpscaleMultiplier, "upscale_multiplier");
@@ -927,6 +941,7 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 
 	SettingsWrapEntryEx(CaptureContainer, "CaptureContainer");
 	SettingsWrapEntryEx(VideoCaptureCodec, "VideoCaptureCodec");
+	SettingsWrapEntryEx(VideoCaptureFormat, "VideoCaptureFormat");
 	SettingsWrapEntryEx(VideoCaptureParameters, "VideoCaptureParameters");
 	SettingsWrapEntryEx(AudioCaptureCodec, "AudioCaptureCodec");
 	SettingsWrapEntryEx(AudioCaptureParameters, "AudioCaptureParameters");
@@ -1848,7 +1863,15 @@ void Pcsx2Config::ClearInvalidPerGameConfiguration(SettingsInterface* si)
 
 void EmuFolders::SetAppRoot()
 {
-	const std::string program_path = FileSystem::GetProgramPath();
+	std::string program_path = FileSystem::GetProgramPath();
+#ifdef __APPLE__
+	const auto bundle_path = CocoaTools::GetNonTranslocatedBundlePath();
+	if (bundle_path.has_value())
+	{
+		// On macOS, override with the bundle path if launched from a bundle.
+		program_path = bundle_path.value();
+	}
+#endif
 	Console.WriteLnFmt("Program Path: {}", program_path);
 
 	AppRoot = Path::Canonicalize(Path::GetDirectory(program_path));
@@ -1867,7 +1890,8 @@ bool EmuFolders::SetResourcesDirectory()
 	Resources = Path::Combine(AppRoot, "resources");
 #else
 	// On macOS, this is in the bundle resources directory.
-	Resources = Path::Canonicalize(Path::Combine(AppRoot, "../Resources"));
+	const std::string program_path = FileSystem::GetProgramPath();
+	Resources = Path::Canonicalize(Path::Combine(Path::GetDirectory(program_path), "../Resources"));
 #endif
 
 	Console.WriteLnFmt("Resources Directory: {}", Resources);

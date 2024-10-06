@@ -379,14 +379,17 @@ set(pcsx2USBSources
 	USB/usb-lightgun/guncon2.cpp
 	USB/usb-mic/audiodev-cubeb.cpp
 	USB/usb-mic/usb-headset.cpp
-	USB/usb-mic/usb-mic-logitech.cpp
-	USB/usb-mic/usb-mic-singstar.cpp
+	USB/usb-mic/usb-mic.cpp
 	USB/usb-msd/usb-msd.cpp
 	USB/usb-pad/lg/lg_ff.cpp
+	USB/usb-pad/usb-buzz.cpp
+	USB/usb-pad/usb-gametrak.cpp
+	USB/usb-pad/usb-realplay.cpp
 	USB/usb-pad/usb-pad-ff.cpp
 	USB/usb-pad/usb-pad-sdl-ff.cpp
 	USB/usb-pad/usb-pad.cpp
 	USB/usb-pad/usb-seamic.cpp
+	USB/usb-pad/usb-trance-vibrator.cpp
 	USB/usb-pad/usb-turntable.cpp
 	USB/usb-printer/usb-printer.cpp
 )
@@ -414,11 +417,15 @@ set(pcsx2USBHeaders
 	USB/usb-mic/audiodev-noop.h
 	USB/usb-mic/audiodev.h
 	USB/usb-mic/usb-headset.h
-	USB/usb-mic/usb-mic-singstar.h
+	USB/usb-mic/usb-mic.h
 	USB/usb-msd/usb-msd.h
 	USB/usb-pad/lg/lg_ff.h
+	USB/usb-pad/usb-buzz.h
+	USB/usb-pad/usb-gametrak.h
+	USB/usb-pad/usb-realplay.h
 	USB/usb-pad/usb-pad-sdl-ff.h
 	USB/usb-pad/usb-pad.h
+	USB/usb-pad/usb-trance-vibrator.h
 	USB/usb-printer/usb-printer.h
 )
 
@@ -428,6 +435,8 @@ set(pcsx2PADSources
 	SIO/Pad/PadBase.cpp
 	SIO/Pad/PadDualshock2.cpp
 	SIO/Pad/PadGuitar.cpp
+	SIO/Pad/PadJogcon.cpp
+	SIO/Pad/PadNegcon.cpp
 	SIO/Pad/PadPopn.cpp
 	SIO/Pad/PadNotConnected.cpp
 )
@@ -436,6 +445,8 @@ set(pcsx2PADHeaders
 	SIO/Pad/PadBase.h
 	SIO/Pad/PadDualshock2.h
 	SIO/Pad/PadGuitar.h
+	SIO/Pad/PadJogcon.h
+	SIO/Pad/PadNegcon.h
 	SIO/Pad/PadPopn.h
 	SIO/Pad/PadNotConnected.h
 	SIO/Pad/PadTypes.h
@@ -775,7 +786,7 @@ set(pcsx2DebugToolsSources
 	DebugTools/MipsAssemblerTables.cpp
 	DebugTools/MipsStackWalk.cpp
 	DebugTools/Breakpoints.cpp
-	DebugTools/SymbolMap.cpp
+	DebugTools/SymbolGuardian.cpp
 	DebugTools/DisR3000A.cpp
 	DebugTools/DisR5900asm.cpp
 	DebugTools/DisVU0Micro.cpp
@@ -792,7 +803,7 @@ set(pcsx2DebugToolsHeaders
 	DebugTools/MipsAssemblerTables.h
 	DebugTools/MipsStackWalk.h
 	DebugTools/Breakpoints.h
-	DebugTools/SymbolMap.h
+	DebugTools/SymbolGuardian.h
 	DebugTools/Debug.h
 	DebugTools/DisASM.h
 	DebugTools/DisVUmicro.h
@@ -1127,7 +1138,6 @@ target_link_libraries(PCSX2_FLAGS INTERFACE
 	cubeb
 	rcheevos
 	discord-rpc
-	demangler
 	simpleini
 	freesurround
 	SDL2::SDL2
@@ -1137,6 +1147,8 @@ target_link_libraries(PCSX2_FLAGS INTERFACE
 	PNG::PNG
 	LZMA::LZMA
 	Zstd::Zstd
+	demanglegnu
+	ccc
 	${LIBC_LIBRARIES}
 )
 
@@ -1268,6 +1280,16 @@ function(setup_main_executable target)
 		get_target_property(WINDEPLOYQT_EXE Qt6::windeployqt IMPORTED_LOCATION)
 		install(CODE "execute_process(COMMAND \"${WINDEPLOYQT_EXE}\" \"${CMAKE_SOURCE_DIR}/bin/$<TARGET_FILE_NAME:${target}>\" --plugindir \"${CMAKE_SOURCE_DIR}/bin/QtPlugins\" --no-compiler-runtime --no-system-d3d-compiler --no-system-dxc-compiler --no-translations COMMAND_ERROR_IS_FATAL ANY)")
 		install(CODE "file(WRITE \"${CMAKE_SOURCE_DIR}/bin/qt.conf\" \"[Paths]\\nPlugins = ./QtPlugins\")")
+	endif()
+
+
+	if (UNIX AND NOT APPLE)
+		if (PACKAGE_MODE)
+			install(TARGETS pcsx2-qt DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})
+			install(DIRECTORY ${CMAKE_SOURCE_DIR}/bin/resources DESTINATION ${CMAKE_INSTALL_FULL_DATADIR}/PCSX2)
+		else()
+			install(TARGETS pcsx2-qt DESTINATION ${CMAKE_SOURCE_DIR}/bin)
+		endif()
 	endif()
 
 	if(APPLE)

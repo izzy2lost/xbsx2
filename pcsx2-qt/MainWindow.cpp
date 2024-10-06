@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2002-2024 PCSX2 Dev Team
-// SPDX-License-Identifier: LGPL-3.0+
+// SPDX-License-Identifier: GPL-3.0+
 
 #include "AboutDialog.h"
 #include "AutoUpdaterDialog.h"
@@ -396,7 +396,7 @@ void MainWindow::connectSignals()
 	connect(m_ui.actionSaveBlockDump, &QAction::toggled, this, &MainWindow::onBlockDumpActionToggled);
 	connect(m_ui.actionShowAdvancedSettings, &QAction::toggled, this, &MainWindow::onShowAdvancedSettingsToggled);
 	connect(m_ui.actionSaveGSDump, &QAction::triggered, this, &MainWindow::onSaveGSDumpActionTriggered);
-	connect(m_ui.actionToolsVideoCapture, &QAction::toggled, this, &MainWindow::onToolsVideoCaptureToggled);
+	connect(m_ui.actionVideoCapture, &QAction::toggled, this, &MainWindow::onVideoCaptureToggled);
 	connect(m_ui.actionEditPatches, &QAction::triggered, this, [this]() { onToolsEditCheatsPatchesTriggered(false); });
 	connect(m_ui.actionEditCheats, &QAction::triggered, this, [this]() { onToolsEditCheatsPatchesTriggered(true); });
 
@@ -586,6 +586,10 @@ void MainWindow::quit()
 			QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
 	}
 
+	// Big picture might still be active.
+	if (m_display_created)
+		g_emu_thread->stopFullscreenUI();
+
 	// Ensure subwindows are removed before quitting. That way the log window cancelling
 	// the close event won't cancel the quit process.
 	destroySubWindows();
@@ -712,14 +716,14 @@ void MainWindow::updateAdvancedSettingsVisibility()
 	m_ui.actionEnableVerboseLogging->setVisible(enabled);
 }
 
-void MainWindow::onToolsVideoCaptureToggled(bool checked)
+void MainWindow::onVideoCaptureToggled(bool checked)
 {
 	if (!s_vm_valid)
 		return;
 
 	// Reset the checked state, we'll get updated by the GS thread.
-	QSignalBlocker sb(m_ui.actionToolsVideoCapture);
-	m_ui.actionToolsVideoCapture->setChecked(!checked);
+	QSignalBlocker sb(m_ui.actionVideoCapture);
+	m_ui.actionVideoCapture->setChecked(!checked);
 
 	if (!checked)
 	{
@@ -744,8 +748,8 @@ void MainWindow::onCaptureStarted(const QString& filename)
 	if (!s_vm_valid)
 		return;
 
-	QSignalBlocker sb(m_ui.actionToolsVideoCapture);
-	m_ui.actionToolsVideoCapture->setChecked(true);
+	QSignalBlocker sb(m_ui.actionVideoCapture);
+	m_ui.actionVideoCapture->setChecked(true);
 }
 
 void MainWindow::onCaptureStopped()
@@ -753,8 +757,8 @@ void MainWindow::onCaptureStopped()
 	if (!s_vm_valid)
 		return;
 
-	QSignalBlocker sb(m_ui.actionToolsVideoCapture);
-	m_ui.actionToolsVideoCapture->setChecked(false);
+	QSignalBlocker sb(m_ui.actionVideoCapture);
+	m_ui.actionVideoCapture->setChecked(false);
 }
 
 void MainWindow::onAchievementsLoginRequested(Achievements::LoginRequestReason reason)
@@ -851,16 +855,16 @@ void MainWindow::restoreStateFromConfig()
 
 void MainWindow::updateEmulationActions(bool starting, bool running, bool stopping)
 {
-	const bool starting_or_running = starting || running;
+	const bool starting_or_running_or_stopping = starting || running || stopping;
 
-	m_ui.actionStartFile->setDisabled(starting_or_running || stopping);
-	m_ui.actionStartDisc->setDisabled(starting_or_running || stopping);
-	m_ui.actionStartBios->setDisabled(starting_or_running || stopping);
-	m_ui.actionToolbarStartFile->setDisabled(starting_or_running || stopping);
-	m_ui.actionToolbarStartDisc->setDisabled(starting_or_running || stopping);
-	m_ui.actionToolbarStartBios->setDisabled(starting_or_running || stopping);
-	m_ui.actionStartFullscreenUI->setDisabled(starting_or_running || stopping);
-	m_ui.actionToolbarStartFullscreenUI->setDisabled(starting_or_running || stopping);
+	m_ui.actionStartFile->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionStartDisc->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionStartBios->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionToolbarStartFile->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionToolbarStartDisc->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionToolbarStartBios->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionStartFullscreenUI->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionToolbarStartFullscreenUI->setDisabled(starting_or_running_or_stopping);
 
 	m_ui.actionPowerOff->setEnabled(running);
 	m_ui.actionPowerOffWithoutSaving->setEnabled(running);
@@ -869,6 +873,7 @@ void MainWindow::updateEmulationActions(bool starting, bool running, bool stoppi
 	m_ui.actionScreenshot->setEnabled(running);
 	m_ui.menuChangeDisc->setEnabled(running);
 	m_ui.menuSaveState->setEnabled(running);
+	m_ui.actionSaveGSDump->setEnabled(running);
 
 	m_ui.actionToolbarPowerOff->setEnabled(running);
 	m_ui.actionToolbarReset->setEnabled(running);
@@ -879,11 +884,11 @@ void MainWindow::updateEmulationActions(bool starting, bool running, bool stoppi
 
 	m_ui.actionViewGameProperties->setEnabled(running);
 
-	m_ui.actionToolsVideoCapture->setEnabled(running);
-	if (!running && m_ui.actionToolsVideoCapture->isChecked())
+	m_ui.actionVideoCapture->setEnabled(running);
+	if (!running && m_ui.actionVideoCapture->isChecked())
 	{
-		QSignalBlocker sb(m_ui.actionToolsVideoCapture);
-		m_ui.actionToolsVideoCapture->setChecked(false);
+		QSignalBlocker sb(m_ui.actionVideoCapture);
+		m_ui.actionVideoCapture->setChecked(false);
 	}
 
 	m_game_list_widget->setDisabled(starting && !running);
@@ -902,8 +907,8 @@ void MainWindow::updateEmulationActions(bool starting, bool running, bool stoppi
 	}
 
 	// scanning needs to be disabled while running
-	m_ui.actionScanForNewGames->setDisabled(starting_or_running || stopping);
-	m_ui.actionRescanAllGames->setDisabled(starting_or_running || stopping);
+	m_ui.actionScanForNewGames->setDisabled(starting_or_running_or_stopping);
+	m_ui.actionRescanAllGames->setDisabled(starting_or_running_or_stopping);
 }
 
 void MainWindow::updateDisplayRelatedActions(bool has_surface, bool render_to_main, bool fullscreen)
@@ -1053,7 +1058,7 @@ bool MainWindow::shouldHideMouseCursor() const
 bool MainWindow::shouldHideMainWindow() const
 {
 	// NOTE: We can't use isRenderingToMain() here, because this happens post-fullscreen-switch.
-	return Host::GetBoolSettingValue("UI", "HideMainWindowWhenRunning", false) ||
+	return (Host::GetBoolSettingValue("UI", "HideMainWindowWhenRunning", false) && !g_emu_thread->shouldRenderToMain()) ||
 		   (g_emu_thread->shouldRenderToMain() && (isRenderingFullscreen() || m_is_temporarily_windowed)) ||
 		   QtHost::InNoGUIMode();
 }
@@ -1354,6 +1359,11 @@ void MainWindow::onGameListEntryContextMenuRequested(const QPoint& point)
 			[this, entry]() { getSettingsWindow()->getGameListSettingsWidget()->addExcludedPath(entry->path); });
 
 		connect(menu.addAction(tr("Reset Play Time")), &QAction::triggered, [this, entry]() { clearGameListEntryPlayTime(entry); });
+
+		if (!entry->serial.empty())
+		{
+			connect(menu.addAction(tr("Check Wiki Page")), &QAction::triggered, [this, entry]() { goToWikiPage(entry); });
+		}
 
 		menu.addSeparator();
 
@@ -2716,6 +2726,11 @@ void MainWindow::clearGameListEntryPlayTime(const GameList::Entry* entry)
 
 	GameList::ClearPlayedTimeForSerial(entry->serial);
 	m_game_list_widget->refresh(false);
+}
+
+void MainWindow::goToWikiPage(const GameList::Entry* entry)
+{
+	QtUtils::OpenURL(this, fmt::format("https://wiki.pcsx2.net/{}", entry->serial).c_str());
 }
 
 std::optional<bool> MainWindow::promptForResumeState(const QString& save_state_path)

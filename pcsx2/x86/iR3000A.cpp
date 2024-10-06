@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2002-2023 PCSX2 Dev Team
-// SPDX-License-Identifier: LGPL-3.0+
+// SPDX-FileCopyrightText: 2002-2024 PCSX2 Dev Team
+// SPDX-License-Identifier: GPL-3.0+
 
 #include "iR3000A.h"
 #include "R3000A.h"
@@ -1544,7 +1544,7 @@ static void iopRecRecompile(const u32 startpc)
 	if(startpc == 0x890)
 	{
 		DevCon.WriteLn(Color_Gray, "[R3000 Debugger] Branch to 0x890 (SYSMEM). Clearing modules.");
-		R3000SymbolMap.ClearModules();
+		R3000SymbolGuardian.ClearIrxModules();
 	}
 
 	// Inject IRX hack

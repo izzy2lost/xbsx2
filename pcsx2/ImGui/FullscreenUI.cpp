@@ -81,6 +81,7 @@ namespace
 #define FSUI_FSTR(str) fmt::runtime(Host::TranslateToStringView(TR_CONTEXT, str))
 #define FSUI_NSTR(str) str
 
+using ImGuiFullscreen::FocusResetType;
 using ImGuiFullscreen::g_large_font;
 using ImGuiFullscreen::g_layout_padding_left;
 using ImGuiFullscreen::g_layout_padding_top;
@@ -134,6 +135,7 @@ using ImGuiFullscreen::ForceKeyNavEnabled;
 using ImGuiFullscreen::GetCachedTexture;
 using ImGuiFullscreen::GetCachedTextureAsync;
 using ImGuiFullscreen::GetPlaceholderTexture;
+using ImGuiFullscreen::GetQueuedFocusResetType;
 using ImGuiFullscreen::HorizontalMenuItem;
 using ImGuiFullscreen::IsFocusResetQueued;
 using ImGuiFullscreen::IsGamepadInputSource;
@@ -660,7 +662,7 @@ void FullscreenUI::OnVMStarted()
 			return;
 
 		s_current_main_window = MainWindowType::None;
-		QueueResetFocus();
+		QueueResetFocus(FocusResetType::WindowChanged);
 	});
 }
 
@@ -728,7 +730,7 @@ void FullscreenUI::OpenPauseMenu()
 		ForceKeyNavEnabled();
 		s_current_main_window = MainWindowType::PauseMenu;
 		s_current_pause_submenu = PauseSubMenu::None;
-		QueueResetFocus();
+		QueueResetFocus(FocusResetType::WindowChanged);
 	});
 }
 
@@ -743,14 +745,14 @@ void FullscreenUI::ClosePauseMenu()
 	s_current_main_window = MainWindowType::None;
 	s_current_pause_submenu = PauseSubMenu::None;
 	s_pause_menu_was_open = false;
-	QueueResetFocus();
+	QueueResetFocus(FocusResetType::WindowChanged);
 }
 
 void FullscreenUI::OpenPauseSubMenu(PauseSubMenu submenu)
 {
 	s_current_main_window = MainWindowType::PauseMenu;
 	s_current_pause_submenu = submenu;
-	QueueResetFocus();
+	QueueResetFocus(FocusResetType::WindowChanged);
 }
 
 void FullscreenUI::Shutdown(bool clear_state)
@@ -913,7 +915,7 @@ void FullscreenUI::ReturnToPreviousWindow()
 	if (VMManager::HasValidVM() && s_pause_menu_was_open)
 	{
 		s_current_main_window = MainWindowType::PauseMenu;
-		QueueResetFocus();
+		QueueResetFocus(FocusResetType::WindowChanged);
 	}
 	else
 	{
@@ -988,7 +990,6 @@ void FullscreenUI::DoStartFile()
 		if (!path.empty())
 			DoStartPath(path);
 
-		QueueResetFocus();
 		CloseFileSelector();
 	};
 
@@ -1052,7 +1053,6 @@ void FullscreenUI::DoStartDisc()
 		FSUI_ICONSTR(ICON_FA_COMPACT_DISC, "Select Disc Drive"), false, std::move(options), [](s32, const std::string& path, bool) {
 			DoStartDisc(path);
 			CloseChoiceDialog();
-			QueueResetFocus();
 		});
 }
 
@@ -1127,7 +1127,6 @@ void FullscreenUI::DoChangeDiscFromFile()
 			}
 		}
 
-		QueueResetFocus();
 		CloseFileSelector();
 		ReturnToPreviousWindow();
 		ClosePauseMenu();
@@ -1182,7 +1181,7 @@ void FullscreenUI::ConfirmShutdownIfMemcardBusy(std::function<void(bool)> callba
 void FullscreenUI::SwitchToLanding()
 {
 	s_current_main_window = MainWindowType::Landing;
-	QueueResetFocus();
+	QueueResetFocus(FocusResetType::WindowChanged);
 }
 
 void FullscreenUI::DrawLandingTemplate(ImVec2* menu_pos, ImVec2* menu_size)
@@ -1261,7 +1260,7 @@ void FullscreenUI::DrawLandingWindow()
 {
 	ImVec2 menu_pos, menu_size;
 	DrawLandingTemplate(&menu_pos, &menu_size);
-	const char version_txt[] = "v2.0.8";
+	const char version_txt[] = "v2.0.8.1";
 	ImGui::PushStyleColor(ImGuiCol_Text, UIBackgroundTextColor);
 	
 	if (BeginHorizontalMenu("landing_window", menu_pos, menu_size, 4))
@@ -1279,7 +1278,7 @@ void FullscreenUI::DrawLandingWindow()
 				FSUI_CSTR("Launch a game from a file, disc, or starts the console without any disc inserted.")))
 		{
 			s_current_main_window = MainWindowType::StartGame;
-			QueueResetFocus();
+			QueueResetFocus(FocusResetType::WindowChanged);
 		}
 
 		if (HorizontalMenuItem(GetCachedTexture("fullscreenui/applications-system.png"), FSUI_CSTR("Settings"),
@@ -1294,7 +1293,7 @@ void FullscreenUI::DrawLandingWindow()
 
 		{
 			s_current_main_window = MainWindowType::Exit;
-			QueueResetFocus();
+			QueueResetFocus(FocusResetType::WindowChanged);
 		}
 		ImGui::SetCursorPos(ImVec2(10, ImGui::GetWindowSize().y - 30));
 		ImGui::Text("XBSX2 is an unofficial fork of PCSX2. Please do not contact PCSX2 for any help with Xbox/XBSX2 related issues.");
@@ -1314,7 +1313,9 @@ void FullscreenUI::DrawLandingWindow()
 	if (IsGamepadInputSource())
 	{
 		SetFullscreenFooterText(std::array{std::make_pair(ICON_PF_BURGER_MENU, FSUI_VSTR("About")),
+			#ifndef WINRT_XBOX
 			std::make_pair(ICON_PF_BUTTON_X, FSUI_VSTR("Toggle Fullscreen")),
+			#endif
 			std::make_pair(ICON_PF_XBOX_DPAD_LEFT_RIGHT, FSUI_VSTR("Navigate")),
 			std::make_pair(ICON_PF_BUTTON_A, FSUI_VSTR("Select")),
 			std::make_pair(ICON_PF_BUTTON_B, FSUI_VSTR("Exit"))});
@@ -1323,7 +1324,9 @@ void FullscreenUI::DrawLandingWindow()
 	{
 		SetFullscreenFooterText(std::array{
 			std::make_pair(ICON_PF_F1, FSUI_VSTR("About")),
+			#ifndef WINRT_XBOX
 			std::make_pair(ICON_PF_F11, FSUI_VSTR("Toggle Fullscreen")),
+			#endif
 			std::make_pair(ICON_PF_ARROW_LEFT ICON_PF_ARROW_RIGHT, FSUI_VSTR("Navigate")),
 			std::make_pair(ICON_PF_ENTER, FSUI_VSTR("Select")), std::make_pair(ICON_PF_ESC, FSUI_VSTR("Exit"))});
 	}
@@ -1345,6 +1348,7 @@ void FullscreenUI::DrawStartGameWindow()
 		{
 			DoStartFile();
 		}
+// Not applicable to UWP, so I'm conditionally excluding it with an #ifndef directive.
 #ifndef WINRT_XBOX
 		if (HorizontalMenuItem(GetCachedTexture("fullscreenui/drive-cdrom.png"), FSUI_CSTR("Start Disc"),
 				FSUI_CSTR("Start a game from a disc in your PC's DVD drive.")))
@@ -1370,7 +1374,7 @@ void FullscreenUI::DrawStartGameWindow()
 			(!AreAnyDialogsOpen() && WantsToCloseMenu()))
 		{
 			s_current_main_window = MainWindowType::Landing;
-			QueueResetFocus();
+			QueueResetFocus(FocusResetType::WindowChanged);
 		}
 	}
 	EndHorizontalMenu();
@@ -1415,25 +1419,7 @@ void FullscreenUI::DrawExitWindow()
 			WantsToCloseMenu())
 		{
 			s_current_main_window = MainWindowType::Landing;
-			QueueResetFocus();
-			ImVec2 fullscreen_pos;
-
-			if (FloatingButton(
-					ICON_FA_QUESTION_CIRCLE, 0.0f, 0.0f, -1.0f, -1.0f, 1.0f, 0.0f, true, g_large_font, &fullscreen_pos))
-				OpenAboutWindow();
-
-#ifndef WINRT_XBOX
-			if (FloatingButton(ICON_FA_LIGHTBULB, fullscreen_pos.x, 0.0f, -1.0f, -1.0f, -1.0f, 0.0f, true, g_large_font, &fullscreen_pos))
-				ToggleTheme();
-
-
-			if (FloatingButton(ICON_FA_WINDOW_CLOSE, fullscreen_pos.x, 0.0f, -1.0f, -1.0f, -1.0f, 0.0f, true, g_large_font, &fullscreen_pos))
-			if (FloatingButton(ICON_FA_WINDOW_CLOSE, fullscreen_pos.x, 0.0f, -1.0f, -1.0f, -1.0f, 0.0f, true, g_large_font, &fullscreen_pos))
-				DoRequestExit();
-
-			if (FloatingButton(ICON_FA_EXPAND, fullscreen_pos.x, 0.0f, -1.0f, -1.0f, -1.0f, 0.0f, true, g_large_font, &fullscreen_pos))
-				DoToggleFullscreen();
-#endif
+			QueueResetFocus(FocusResetType::WindowChanged);
 		}
 
 		if (HorizontalMenuItem(GetCachedTexture("fullscreenui/exit.png"), FSUI_CSTR("Exit XBSX2"),
@@ -1441,6 +1427,7 @@ void FullscreenUI::DrawExitWindow()
 		{
 			DoRequestExit();
 		}
+// We don't need this on UWP so it's conditionally excluded with an #ifndef directive.
 #ifndef WINRT_XBOX
 		if (HorizontalMenuItem(GetCachedTexture("fullscreenui/desktop-mode.png"), FSUI_CSTR("Desktop Mode"),
 				FSUI_CSTR("Exits Big Picture mode, returning to the desktop interface.")))
@@ -2740,7 +2727,7 @@ void FullscreenUI::SwitchToGameSettings(const std::string_view serial, u32 crc)
 	PopulatePatchesAndCheatsList(serial, crc);
 	s_current_main_window = MainWindowType::Settings;
 	s_settings_page = SettingsPage::Summary;
-	QueueResetFocus();
+	QueueResetFocus(FocusResetType::WindowChanged);
 }
 
 void FullscreenUI::SwitchToGameSettings()
@@ -2848,12 +2835,12 @@ void FullscreenUI::DrawSettingsWindow()
 		static constexpr const char* global_icons[] = {ICON_FA_TV, ICON_PF_MICROCHIP, ICON_PF_GEARS_OPTIONS_SETTINGS, ICON_PF_PICTURE,
 			ICON_PF_SOUND, ICON_PF_MEMORY_CARD, ICON_PF_GAMEPAD_ALT, ICON_PF_KEYBOARD_ALT, ICON_FA_TROPHY, ICON_FA_FOLDER_OPEN, ICON_FA_EXCLAMATION_TRIANGLE};
 		static constexpr const char* per_game_icons[] = {ICON_FA_INFO, ICON_PF_GEARS_OPTIONS_SETTINGS, ICON_FA_BAND_AID, ICON_PF_INFINITY,
-			ICON_PF_PICTURE, ICON_PF_SOUND, ICON_PF_MEMORY_CARD, ICON_PF_GAMEPAD_ALT, ICON_FA_EXCLAMATION_TRIANGLE};
+			ICON_PF_PICTURE, ICON_PF_SOUND, ICON_PF_MEMORY_CARD, ICON_FA_EXCLAMATION_TRIANGLE};
 		static constexpr SettingsPage global_pages[] = {SettingsPage::Interface, SettingsPage::BIOS, SettingsPage::Emulation,
 			SettingsPage::Graphics, SettingsPage::Audio, SettingsPage::MemoryCard, SettingsPage::Controller, SettingsPage::Hotkey,
 			SettingsPage::Achievements, SettingsPage::Folders, SettingsPage::Advanced};
 		static constexpr SettingsPage per_game_pages[] = {SettingsPage::Summary, SettingsPage::Emulation, SettingsPage::Patches,
-			SettingsPage::Cheats, SettingsPage::Graphics, SettingsPage::Audio, SettingsPage::MemoryCard, SettingsPage::Controller,
+			SettingsPage::Cheats, SettingsPage::Graphics, SettingsPage::Audio, SettingsPage::MemoryCard,
 			SettingsPage::GameFixes};
 		static constexpr const char* titles[] = {FSUI_NSTR("Summary"), FSUI_NSTR("Interface Settings"), FSUI_NSTR("BIOS Settings"),
 			FSUI_NSTR("Emulation Settings"), FSUI_NSTR("Graphics Settings"), FSUI_NSTR("Audio Settings"), FSUI_NSTR("Memory Card Settings"),
@@ -2883,7 +2870,7 @@ void FullscreenUI::DrawSettingsWindow()
 			{
 				index = (index == 0) ? (count - 1) : (index - 1);
 				s_settings_page = pages[index];
-				QueueResetFocus();
+				QueueResetFocus(FocusResetType::WindowChanged);
 			}
 			else if (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight, true) ||
 					 ImGui::IsKeyPressed(ImGuiKey_NavGamepadTweakFast, true) ||
@@ -2891,7 +2878,7 @@ void FullscreenUI::DrawSettingsWindow()
 			{
 				index = (index + 1) % count;
 				s_settings_page = pages[index];
-				QueueResetFocus();
+				QueueResetFocus(FocusResetType::WindowChanged);
 			}
 		}
 
@@ -2915,6 +2902,7 @@ void FullscreenUI::DrawSettingsWindow()
 			if (NavButton(icons[i], i == index, true, ITEM_WIDTH, LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
 			{
 				s_settings_page = pages[i];
+				QueueResetFocus(FocusResetType::WindowChanged);
 			}
 		}
 
@@ -2925,7 +2913,12 @@ void FullscreenUI::DrawSettingsWindow()
 
 	// we have to do this here, because otherwise it uses target, and jumps a frame later.
 	if (IsFocusResetQueued())
-		ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
+		if (FocusResetType focus_reset = GetQueuedFocusResetType(); focus_reset != FocusResetType::None &&
+																	focus_reset != FocusResetType::PopupOpened &&
+																	focus_reset != FocusResetType::PopupClosed)
+		{
+			ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
+		}
 
 	if (BeginFullscreenWindow(
 			ImVec2(0.0f, heading_size.y),
@@ -3042,8 +3035,8 @@ void FullscreenUI::DrawSummarySettingsPage()
 			CopyTextToClipboard(FSUI_STR("Game serial copied to clipboard."), s_game_settings_entry->serial);
 		if (MenuButton(FSUI_ICONSTR(ICON_FA_CODE, "CRC"), fmt::format("{:08X}", s_game_settings_entry->crc).c_str(), true))
 			CopyTextToClipboard(FSUI_STR("Game CRC copied to clipboard."), fmt::format("{:08X}", s_game_settings_entry->crc));
-		if (MenuButton(FSUI_ICONSTR(ICON_FA_BOX, "Type"), GameList::EntryTypeToString(s_game_settings_entry->type), true))
-			CopyTextToClipboard(FSUI_STR("Game type copied to clipboard."), GameList::EntryTypeToString(s_game_settings_entry->type));
+		if (MenuButton(FSUI_ICONSTR(ICON_FA_BOX, "Type"), GameList::EntryTypeToDisplayString(s_game_settings_entry->type), true))
+			CopyTextToClipboard(FSUI_STR("Game type copied to clipboard."), GameList::EntryTypeToDisplayString(s_game_settings_entry->type));
 		if (MenuButton(FSUI_ICONSTR(ICON_FA_GLOBE, "Region"), GameList::RegionToString(s_game_settings_entry->region), true))
 			CopyTextToClipboard(FSUI_STR("Game region copied to clipboard."), GameList::RegionToString(s_game_settings_entry->region));
 		if (MenuButton(FSUI_ICONSTR(ICON_FA_STAR, "Compatibility Rating"),
@@ -3085,12 +3078,43 @@ void FullscreenUI::DrawSummarySettingsPage()
 						}
 					}
 
-					QueueResetFocus();
+					QueueResetFocus(FocusResetType::PopupClosed);
 					CloseFileSelector();
 				};
 
 				OpenFileSelector(FSUI_ICONSTR(ICON_FA_COMPACT_DISC, "Select Disc Path"), false, std::move(callback), GetDiscImageFilters());
 			}
+		}
+
+		const std::optional<SmallString> value = bsi->GetOptionalSmallStringValue("EmuCore", "InputProfileName", "Shared");
+
+		if (MenuButtonWithValue(FSUI_ICONSTR_S(ICON_PF_GAMEPAD_ALT, "Input Profile", "input_profile"),
+				FSUI_CSTR("The selected input profile will be used for this game."),
+				value.has_value() ? value->c_str() : FSUI_CSTR("Shared"), true))
+		{
+			ImGuiFullscreen::ChoiceDialogOptions options;
+			std::vector<std::string> names;
+
+			options.emplace_back(fmt::format(FSUI_FSTR("Shared")), (value.has_value() && !value->empty() && value == "Shared") ? true : false);
+			names.emplace_back("Shared");
+
+			for (const std::string& name : Pad::GetInputProfileNames())
+			{
+				options.emplace_back(fmt::format(FSUI_FSTR(name)), (value.has_value() && !value->empty() && value == name) ? true : false);
+				names.push_back(std::move(name));
+			}
+
+			OpenChoiceDialog(FSUI_CSTR("Input Profile"), false, options,
+				[game_settings = IsEditingGameSettings(bsi), names = std::move(names)](s32 index, const std::string& title, bool checked) {
+					if (index < 0)
+						return;
+
+					auto lock = Host::GetSettingsLock();
+					SettingsInterface* bsi = GetEditingSettingsInterface(game_settings);
+					bsi->SetStringValue("EmuCore", "InputProfileName", names[index].c_str());
+					SetSettingsChanged(bsi);
+					CloseChoiceDialog();
+				});
 		}
 	}
 	else
@@ -3125,9 +3149,11 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 #endif	
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_PAUSE, "Pause On Start"), FSUI_CSTR("Pauses the emulator when a game is started."), "UI",
 		"StartPaused", false);
+#ifndef WINRT_XBOX
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_EYE, "Pause On Focus Loss"),
 		FSUI_CSTR("Pauses the emulator when you minimize the window or switch to another application, and unpauses when you switch back."),
 		"UI", "PauseOnFocusLoss", false);
+#endif
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_GAMEPAD, "Pause On Controller Disconnection"),
 		FSUI_CSTR("Pauses the emulator when a controller with bindings is disconnected."), "UI", "PauseOnControllerDisconnection", false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_LIST_ALT, "Pause On Menu"),
@@ -3148,6 +3174,7 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 		ImGuiFullscreen::SetTheme(bsi->GetBoolValue("UI", "UseLightFullscreenUITheme", false));
 	}
 
+	// We are already in Fullscreen so why do we need this setting? We can't change it anyway on UWP.
 #ifndef WINRT_XBOX
 	MenuHeading("Game Display");
 	DrawToggleSetting(bsi, ICON_FA_TV " Start Fullscreen", "Automatically switches to fullscreen mode when the program is started.", "UI",
@@ -3163,10 +3190,13 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 	DrawToggleSetting(bsi, ICON_FA_LIST " Show Messages",
 		"Shows on-screen-display messages when events occur such as save states being created/loaded, screenshots being taken, etc.",
 		"EmuCore/GS", "OsdShowMessages", true);
+	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_INFO, "Show PCSX2 Version"),
+		FSUI_CSTR("Shows the current PCSX2 version on the top-right corner of the display."), "EmuCore/GS",
+		"OsdShowVersion", false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_TACHOMETER_ALT, "Show Speed"),
 		FSUI_CSTR("Shows the current emulation speed of the system in the top-right corner of the display as a percentage."), "EmuCore/GS",
 		"OsdShowSpeed", false);
-	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_PF_SIXTY_CIRCLE, "Show FPS"),
+	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_IMAGES, "Show FPS"),
 		FSUI_CSTR(
 			"Shows the number of video frames (or v-syncs) displayed per second by the system in the top-right corner of the display."),
 		"EmuCore/GS", "OsdShowFPS", false);
@@ -3183,6 +3213,12 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_PLAY, "Show Status Indicators"),
 		FSUI_CSTR("Shows indicators when fast forwarding, pausing, and other abnormal states are active."), "EmuCore/GS",
 		"OsdShowIndicators", true);
+	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_KEYBOARD, "Show Input Recording Status"),
+		FSUI_CSTR("Shows the currently active input recording status."), "EmuCore/GS",
+		"OsdShowInputRec", true);
+	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_VIDEO, "Show Video Capture Status"),
+		FSUI_CSTR("Shows the currently active video capture status."), "EmuCore/GS",
+		"OsdShowVideoCapture", true);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_SLIDERS_H, "Show Settings"),
 		FSUI_CSTR("Shows the current configuration in the bottom-right corner of the display."), "EmuCore/GS", "OsdShowSettings", false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_PF_GAMEPAD_ALT, "Show Inputs"),
@@ -3190,6 +3226,9 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 		"OsdShowInputs", false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_PF_HEARTBEAT_ALT, "Show Frame Times"),
 		FSUI_CSTR("Shows a visual history of frame times in the upper-left corner of the display."), "EmuCore/GS", "OsdShowFrameTimes",
+		false);
+	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_PF_MONITOR_CODE, "Show Hardware Info"),
+		FSUI_CSTR("Shows the current system hardware information on the OSD."), "EmuCore/GS", "OsdShowHardwareInfo",
 		false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_EXCLAMATION, "Warn About Unsafe Settings"),
 		FSUI_CSTR("Displays warnings when settings are enabled which may break games."), "EmuCore", "WarnAboutUnsafeSettings", true);
@@ -3644,7 +3683,7 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 	DrawStringListSetting(bsi, FSUI_CSTR("Aspect Ratio"), FSUI_CSTR("Selects the aspect ratio to display the game content at."),
 		"EmuCore/GS", "AspectRatio", "Auto 4:3/3:2", Pcsx2Config::GSOptions::AspectRatioNames, Pcsx2Config::GSOptions::AspectRatioNames, 0,
 		false);
-	DrawStringListSetting(bsi, FSUI_CSTR("FMV Aspect Ratio"),
+	DrawStringListSetting(bsi, FSUI_CSTR("FMV Aspect Ratio Override"),
 		FSUI_CSTR("Selects the aspect ratio for display when a FMV is detected as playing."), "EmuCore/GS", "FMVAspectRatioSwitch",
 		"Auto 4:3/3:2", Pcsx2Config::GSOptions::FMVAspectRatioSwitchNames, Pcsx2Config::GSOptions::FMVAspectRatioSwitchNames, 0, false);
 	DrawIntListSetting(bsi, FSUI_CSTR("Deinterlacing"),
@@ -4164,7 +4203,7 @@ void FullscreenUI::DrawMemoryCardSettingsPage()
 	EndMenuButtons();
 }
 
-// Grabbed from commit 05bed05 of the PCSX2 repository.
+// Grabbed from commit 05bed05 of the PCSX2 repository. This is the latest commit that has the old memory card settings. Before they made it link to the Qt dialog.
 void FullscreenUI::DrawCreateMemoryCardWindow()
 {
 	ImGui::SetNextWindowSize(LayoutScale(700.0f, 0.0f));
@@ -4377,44 +4416,10 @@ void FullscreenUI::DrawControllerSettingsPage()
 
 	MenuHeading(FSUI_CSTR("Configuration"));
 
-	if (IsEditingGameSettings(bsi))
+	if (MenuButton(FSUI_ICONSTR(ICON_FA_DUMPSTER_FIRE, "Reset Settings"),
+			FSUI_CSTR("Resets all configuration to defaults (including bindings).")))
 	{
-		if (DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_COG, "Per-Game Configuration"),
-				FSUI_CSTR("Uses game-specific settings for controllers for this game."), "Pad", "UseGameSettingsForController", false,
-				IsEditingGameSettings(bsi), false))
-		{
-			// did we just enable per-game for the first time?
-			if (bsi->GetBoolValue("Pad", "UseGameSettingsForController", false) &&
-				!bsi->GetBoolValue("Pad", "GameSettingsInitialized", false))
-			{
-				bsi->SetBoolValue("Pad", "GameSettingsInitialized", true);
-				CopyGlobalControllerSettingsToGame();
-			}
-		}
-	}
-
-	if (IsEditingGameSettings(bsi) && !bsi->GetBoolValue("Pad", "UseGameSettingsForController", false))
-	{
-		// nothing to edit..
-		EndMenuButtons();
-		return;
-	}
-
-	if (IsEditingGameSettings(bsi))
-	{
-		if (MenuButton(
-				FSUI_ICONSTR(ICON_FA_COPY, "Copy Global Settings"), FSUI_CSTR("Copies the global controller configuration to this game.")))
-		{
-			CopyGlobalControllerSettingsToGame();
-		}
-	}
-	else
-	{
-		if (MenuButton(FSUI_ICONSTR(ICON_FA_DUMPSTER_FIRE, "Reset Settings"),
-				FSUI_CSTR("Resets all configuration to defaults (including bindings).")))
-		{
-			ResetControllerSettings();
-		}
+		ResetControllerSettings();
 	}
 
 	if (MenuButton(
@@ -4427,6 +4432,7 @@ void FullscreenUI::DrawControllerSettingsPage()
 		DoSaveInputProfile();
 	}
 
+	// We don't need any of the other input sources so the others were #ifnded out.
 #ifndef WINRT_XBOX
 	MenuHeading("Input Sources");
 
@@ -4438,23 +4444,12 @@ void FullscreenUI::DrawControllerSettingsPage()
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_LIGHTBULB, "SDL DualSense Player LED"),
 		FSUI_CSTR("Enable/Disable the Player LED on DualSense controllers."), "InputSources", "SDLPS5PlayerLED", false,
 		bsi->GetBoolValue("InputSources", "SDLControllerEnhancedMode", true), false);
-#ifdef _WIN32
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_COG, "SDL Raw Input"), FSUI_CSTR("Allow SDL to use raw access to input devices."),
 		"InputSources", "SDLRawInput", false, bsi->GetBoolValue("InputSources", "SDL", true), false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_COG, "Enable XInput Input Source"),
 		FSUI_CSTR("The XInput source provides support for XBox 360/XBox One/XBox Series controllers."), "InputSources", "XInput", false,
 		true, false);
 #endif
-#endif
-#if defined(SDL_BUILD) && defined(_WIN32)
-	DrawToggleSetting(bsi, ICON_FA_COG " SDL Raw Input", "Allow SDL to use raw access to input devices.", "InputSources", "SDLRawInput",
-		false, bsi->GetBoolValue("InputSources", "SDL", true), false);
-#endif
-#ifdef _WIN32
-	DrawToggleSetting(bsi, ICON_FA_COG " Enable XInput Input Source",
-		"The XInput source provides support for XBox 360/XBox One/XBox Series controllers.", "InputSources", "XInput", false, true, false);
-#endif
-
 	MenuHeading(FSUI_CSTR("Multitap"));
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_PLUS_SQUARE, "Enable Console Port 1 Multitap"),
 		FSUI_CSTR("Enables an additional three controller slots. Not supported in all games."), "Pad", "MultitapPort1", false, true, false);
@@ -5527,7 +5522,7 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ModAlpha(UIPrimaryColor, 0.9f));
 
-	if (ImGui::BeginChild("state_titlebar", heading_size, false, ImGuiWindowFlags_NavFlattened))
+	if (ImGui::BeginChild("state_titlebar", heading_size, ImGuiChildFlags_NavFlattened, 0))
 	{
 		BeginNavBar();
 		if (NavButton(ICON_PF_BACKWARD, true, true))
@@ -5548,7 +5543,7 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 	bool close_handled = false;
 	if (s_save_state_selector_open &&
 		ImGui::BeginChild("state_list", ImVec2(io.DisplaySize.x, io.DisplaySize.y - LayoutScale(LAYOUT_FOOTER_HEIGHT) - heading_size.y),
-			false, ImGuiWindowFlags_NavFlattened))
+			ImGuiChildFlags_NavFlattened, 0))
 	{
 		BeginMenuButtons();
 
@@ -5674,7 +5669,7 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 				{
 					s_save_state_selector_submenu_index = -1;
 					if (!closed)
-						QueueResetFocus();
+						QueueResetFocus(FocusResetType::WindowChanged);
 				}
 
 				ImGui::PopStyleColor(4);
@@ -6057,7 +6052,7 @@ void FullscreenUI::DrawGameListWindow()
 	else if (ImGui::IsKeyPressed(ImGuiKey_GamepadStart, false) || ImGui::IsKeyPressed(ImGuiKey_F2))
 	{
 		s_current_main_window = MainWindowType::GameListSettings;
-		QueueResetFocus();
+		QueueResetFocus(FocusResetType::WindowChanged);
 	}
 
 	switch (s_game_list_view)
@@ -6475,7 +6470,7 @@ void FullscreenUI::DrawGameListSettingsWindow()
 		if (NavButton(ICON_PF_BACKWARD, true, true))
 		{
 			s_current_main_window = MainWindowType::GameList;
-			QueueResetFocus();
+			QueueResetFocus(FocusResetType::WindowChanged);
 		}
 
 		NavTitle(FSUI_CSTR("Game List Settings"));
@@ -6496,7 +6491,7 @@ void FullscreenUI::DrawGameListSettingsWindow()
 	if (ImGui::IsWindowFocused() && WantsToCloseMenu())
 	{
 		s_current_main_window = MainWindowType::GameList;
-		QueueResetFocus();
+		QueueResetFocus(FocusResetType::WindowChanged);
 	}
 
 	auto lock = Host::GetSettingsLock();
@@ -6612,6 +6607,7 @@ void FullscreenUI::DrawGameListSettingsWindow()
 			FSUI_CSTR("Reverses the game list sort order from the default (usually ascending to descending)."), "UI",
 			"FullscreenUIGameSortReverse", false);
 	}
+	// We don't have an implementation for this yet.
 #ifndef WINRT_XBOX
 	MenuHeading(FSUI_CSTR("Cover Settings"));
 	{
@@ -6652,7 +6648,7 @@ void FullscreenUI::SwitchToGameList()
 		auto lock = Host::GetSettingsLock();
 		PopulateGameListDirectoryCache(Host::Internal::GetBaseSettingsLayer());
 	}
-	QueueResetFocus();
+	QueueResetFocus(FocusResetType::WindowChanged);
 }
 
 GSTexture* FullscreenUI::GetGameListCover(const GameList::Entry* entry)
@@ -6735,7 +6731,7 @@ void FullscreenUI::DrawAboutWindow()
 	{
 		ImGui::NewLine();
 
-		ImGui::TextWrapped("Version: %s", GIT_REV);
+		ImGui::TextWrapped("Version: %s (Git: %s)", APP_VERSION, GIT_REV);
 
 		ImGui::TextWrapped(
 			"XBSX2 is a free and open-source PlayStation 2 (PS2) emulator. Its purpose is to emulate the PS2's hardware, using a "
@@ -6806,7 +6802,7 @@ void FullscreenUI::DrawAchievementsLoginWindow()
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, LayoutScale(10.0f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, LayoutScale(20.0f, 20.0f));
 
-	// Thank you to @worleydl for the logic to the Login part
+	// Thank you to @worleydl for the logic to the Achievements Login code.
 	if (ImGui::BeginPopupModal("Achievements Login", &s_achievements_login_open, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
 	{
 		ImGui::TextWrapped("%s", FSUI_CSTR(
@@ -6912,7 +6908,7 @@ void FullscreenUI::SwitchToAchievementsWindow()
 	}
 
 	s_current_main_window = MainWindowType::Achievements;
-	QueueResetFocus();
+	QueueResetFocus(FocusResetType::WindowChanged);
 }
 
 bool FullscreenUI::OpenLeaderboardsWindow()
@@ -6956,7 +6952,7 @@ void FullscreenUI::SwitchToLeaderboardsWindow()
 	}
 
 	s_current_main_window = MainWindowType::Leaderboards;
-	QueueResetFocus();
+	QueueResetFocus(FocusResetType::WindowChanged);
 }
 
 void FullscreenUI::DrawAchievementsSettingsPage(std::unique_lock<std::mutex>& settings_lock)
@@ -7178,6 +7174,7 @@ TRANSLATE_NOOP("FullscreenUI", "On-Screen Display");
 TRANSLATE_NOOP("FullscreenUI", "Determines how large the on-screen messages and monitor are.");
 TRANSLATE_NOOP("FullscreenUI", "%d%%");
 TRANSLATE_NOOP("FullscreenUI", "Shows on-screen-display messages when events occur such as save states being created/loaded, screenshots being taken, etc.");
+TRANSLATE_NOOP("FullscreenUI", "Shows the current PCSX2 version on the top-right corner of the display.");
 TRANSLATE_NOOP("FullscreenUI", "Shows the current emulation speed of the system in the top-right corner of the display as a percentage.");
 TRANSLATE_NOOP("FullscreenUI", "Shows the number of video frames (or v-syncs) displayed per second by the system in the top-right corner of the display.");
 TRANSLATE_NOOP("FullscreenUI", "Shows the CPU usage based on threads in the top-right corner of the display.");
@@ -7185,9 +7182,12 @@ TRANSLATE_NOOP("FullscreenUI", "Shows the host's GPU usage in the top-right corn
 TRANSLATE_NOOP("FullscreenUI", "Shows the resolution of the game in the top-right corner of the display.");
 TRANSLATE_NOOP("FullscreenUI", "Shows statistics about GS (primitives, draw calls) in the top-right corner of the display.");
 TRANSLATE_NOOP("FullscreenUI", "Shows indicators when fast forwarding, pausing, and other abnormal states are active.");
+TRANSLATE_NOOP("FullscreenUI", "Shows the currently active input recording status.");
+TRANSLATE_NOOP("FullscreenUI", "Shows the currently active video capture status.");
 TRANSLATE_NOOP("FullscreenUI", "Shows the current configuration in the bottom-right corner of the display.");
 TRANSLATE_NOOP("FullscreenUI", "Shows the current controller state of the system in the bottom-left corner of the display.");
 TRANSLATE_NOOP("FullscreenUI", "Shows a visual history of frame times in the upper-left corner of the display.");
+TRANSLATE_NOOP("FullscreenUI", "Shows the current system hardware information on the OSD.");
 TRANSLATE_NOOP("FullscreenUI", "Displays warnings when settings are enabled which may break games.");
 TRANSLATE_NOOP("FullscreenUI", "Operations");
 TRANSLATE_NOOP("FullscreenUI", "Resets configuration to defaults (excluding controller settings).");
@@ -7233,7 +7233,7 @@ TRANSLATE_NOOP("FullscreenUI", "Selects the API used to render the emulated GS."
 TRANSLATE_NOOP("FullscreenUI", "Display");
 TRANSLATE_NOOP("FullscreenUI", "Aspect Ratio");
 TRANSLATE_NOOP("FullscreenUI", "Selects the aspect ratio to display the game content at.");
-TRANSLATE_NOOP("FullscreenUI", "FMV Aspect Ratio");
+TRANSLATE_NOOP("FullscreenUI", "FMV Aspect Ratio Override");
 TRANSLATE_NOOP("FullscreenUI", "Selects the aspect ratio for display when a FMV is detected as playing.");
 TRANSLATE_NOOP("FullscreenUI", "Deinterlacing");
 TRANSLATE_NOOP("FullscreenUI", "Selects the algorithm used to convert the PS2's interlaced output to progressive for display.");
@@ -7321,6 +7321,8 @@ TRANSLATE_NOOP("FullscreenUI", "When enabled GPU converts colormap-textures, oth
 TRANSLATE_NOOP("FullscreenUI", "Upscaling Fixes");
 TRANSLATE_NOOP("FullscreenUI", "Half Pixel Offset");
 TRANSLATE_NOOP("FullscreenUI", "Adjusts vertices relative to upscaling.");
+TRANSLATE_NOOP("FullscreenUI", "Native Scaling");
+TRANSLATE_NOOP("FullscreenUI", "Attempt to do rescaling at native resolution.");
 TRANSLATE_NOOP("FullscreenUI", "Round Sprite");
 TRANSLATE_NOOP("FullscreenUI", "Adjusts sprite coordinates.");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear Upscale");
@@ -7543,6 +7545,7 @@ TRANSLATE_NOOP("FullscreenUI", "Identifies any new files added to the game direc
 TRANSLATE_NOOP("FullscreenUI", "Forces a full rescan of all games previously identified.");
 TRANSLATE_NOOP("FullscreenUI", "About XBSX2");
 TRANSLATE_NOOP("FullscreenUI", "PCSX2 is a free and open-source PlayStation 2 (PS2) emulator. Its purpose is to emulate the PS2's hardware, using a combination of MIPS CPU Interpreters, Recompilers and a Virtual Machine which manages hardware states and PS2 system memory. This allows you to play PS2 games on your PC, with many additional features and benefits.");
+TRANSLATE_NOOP("FullscreenUI", "Version: %s");
 TRANSLATE_NOOP("FullscreenUI", "PlayStation 2 and PS2 are registered trademarks of Sony Interactive Entertainment. This application is not affiliated in any way with Sony Interactive Entertainment.");
 TRANSLATE_NOOP("FullscreenUI", "When enabled and logged in, XBSX2 will scan for achievements on startup.");
 TRANSLATE_NOOP("FullscreenUI", "\"Challenge\" mode for achievements, including leaderboard tracking. Disables save state, cheats, and slowdown functions.");
@@ -7666,20 +7669,22 @@ TRANSLATE_NOOP("FullscreenUI", "Blend (Bottom Field First, Half FPS)");
 TRANSLATE_NOOP("FullscreenUI", "Adaptive (Top Field First)");
 TRANSLATE_NOOP("FullscreenUI", "Adaptive (Bottom Field First)");
 TRANSLATE_NOOP("FullscreenUI", "Native (PS2)");
-TRANSLATE_NOOP("FullscreenUI", "1.25x Native");
-TRANSLATE_NOOP("FullscreenUI", "1.5x Native");
-TRANSLATE_NOOP("FullscreenUI", "1.75x Native");
-TRANSLATE_NOOP("FullscreenUI", "2x Native (~720p)");
-TRANSLATE_NOOP("FullscreenUI", "2.25x Native");
-TRANSLATE_NOOP("FullscreenUI", "2.5x Native");
-TRANSLATE_NOOP("FullscreenUI", "2.75x Native");
-TRANSLATE_NOOP("FullscreenUI", "3x Native (~1080p)");
-TRANSLATE_NOOP("FullscreenUI", "3.5x Native");
-TRANSLATE_NOOP("FullscreenUI", "4x Native (~1440p/2K)");
-TRANSLATE_NOOP("FullscreenUI", "5x Native (~1620p)");
-TRANSLATE_NOOP("FullscreenUI", "6x Native (~2160p/4K)");
-TRANSLATE_NOOP("FullscreenUI", "7x Native (~2520p)");
-TRANSLATE_NOOP("FullscreenUI", "8x Native (~2880p)");
+TRANSLATE_NOOP("FullscreenUI", "1.25x Native (~450px)");
+TRANSLATE_NOOP("FullscreenUI", "1.5x Native (~540px)");
+TRANSLATE_NOOP("FullscreenUI", "1.75x Native (~630px)");
+TRANSLATE_NOOP("FullscreenUI", "2x Native (~720px/HD)");
+TRANSLATE_NOOP("FullscreenUI", "2.5x Native (~900px/HD+)");
+TRANSLATE_NOOP("FullscreenUI", "3x Native (~1080px/FHD)");
+TRANSLATE_NOOP("FullscreenUI", "3.5x Native (~1260px)");
+TRANSLATE_NOOP("FullscreenUI", "4x Native (~1440px/QHD)");
+TRANSLATE_NOOP("FullscreenUI", "5x Native (~1800px/QHD+)");
+TRANSLATE_NOOP("FullscreenUI", "6x Native (~2160px/4K UHD)");
+TRANSLATE_NOOP("FullscreenUI", "7x Native (~2520px)");
+TRANSLATE_NOOP("FullscreenUI", "8x Native (~2880px/5K UHD)");
+TRANSLATE_NOOP("FullscreenUI", "9x Native (~3240px)");
+TRANSLATE_NOOP("FullscreenUI", "10x Native (~3600px/6K UHD)");
+TRANSLATE_NOOP("FullscreenUI", "11x Native (~3960px)");
+TRANSLATE_NOOP("FullscreenUI", "12x Native (~4320px/8K UHD)");
 TRANSLATE_NOOP("FullscreenUI", "Nearest");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (Forced)");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (PS2)");
@@ -7737,6 +7742,7 @@ TRANSLATE_NOOP("FullscreenUI", "Normal (Vertex)");
 TRANSLATE_NOOP("FullscreenUI", "Special (Texture)");
 TRANSLATE_NOOP("FullscreenUI", "Special (Texture - Aggressive)");
 TRANSLATE_NOOP("FullscreenUI", "Align To Native");
+TRANSLATE_NOOP("FullscreenUI", "Aggressive");
 TRANSLATE_NOOP("FullscreenUI", "Half");
 TRANSLATE_NOOP("FullscreenUI", "Force Bilinear");
 TRANSLATE_NOOP("FullscreenUI", "Force Nearest");
@@ -7818,6 +7824,7 @@ TRANSLATE_NOOP("FullscreenUI", "Double-Click Toggles Fullscreen");
 TRANSLATE_NOOP("FullscreenUI", "Hide Cursor In Fullscreen");
 TRANSLATE_NOOP("FullscreenUI", "OSD Scale");
 TRANSLATE_NOOP("FullscreenUI", "Show Messages");
+TRANSLATE_NOOP("FullscreenUI", "Show PCSX2 Version");
 TRANSLATE_NOOP("FullscreenUI", "Show Speed");
 TRANSLATE_NOOP("FullscreenUI", "Show FPS");
 TRANSLATE_NOOP("FullscreenUI", "Show CPU Usage");
@@ -7825,9 +7832,12 @@ TRANSLATE_NOOP("FullscreenUI", "Show GPU Usage");
 TRANSLATE_NOOP("FullscreenUI", "Show Resolution");
 TRANSLATE_NOOP("FullscreenUI", "Show GS Statistics");
 TRANSLATE_NOOP("FullscreenUI", "Show Status Indicators");
+TRANSLATE_NOOP("FullscreenUI", "Show Input Recording Status");
+TRANSLATE_NOOP("FullscreenUI", "Show Video Capture Status");
 TRANSLATE_NOOP("FullscreenUI", "Show Settings");
 TRANSLATE_NOOP("FullscreenUI", "Show Inputs");
 TRANSLATE_NOOP("FullscreenUI", "Show Frame Times");
+TRANSLATE_NOOP("FullscreenUI", "Show Hardware Info");
 TRANSLATE_NOOP("FullscreenUI", "Warn About Unsafe Settings");
 TRANSLATE_NOOP("FullscreenUI", "Reset Settings");
 TRANSLATE_NOOP("FullscreenUI", "Change Search Directory");

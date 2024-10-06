@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: 2002-2023 PCSX2 Dev Team
-// SPDX-License-Identifier: LGPL-3.0+
+// SPDX-FileCopyrightText: 2002-2024 PCSX2 Dev Team
+// SPDX-License-Identifier: GPL-3.0+
 
 #include "Achievements.h"
 #include "CDVD/CDVD.h"
@@ -7,8 +7,7 @@
 #include "Counters.h"
 #include "DEV9/DEV9.h"
 #include "DebugTools/DebugInterface.h"
-#include "DebugTools/MIPSAnalyst.h"
-#include "DebugTools/SymbolMap.h"
+#include "DebugTools/SymbolGuardian.h"
 #include "Elfheader.h"
 #include "FW.h"
 #include "GS.h"
@@ -233,7 +232,7 @@ bool VMManager::PerformEarlyHardwareChecks(const char** error)
 	const size_t runtime_host_page_size = HostSys::GetRuntimePageSize();
 	if (__pagesize != runtime_host_page_size)
 	{
-		*error = "Page size mismatch. This build cannot run on your Mac.\n\n" COMMON_DOWNLOAD_MESSAGE;
+		*error = "Page size mismatch. This build cannot run on your system.\n\n" COMMON_DOWNLOAD_MESSAGE;
 		return false;
 	}
 #endif
@@ -447,6 +446,9 @@ void VMManager::Internal::CPUThreadShutdown()
 
 	// Ensure emulog gets flushed.
 	Log::SetFileOutputLevel(LOGLEVEL_NONE, std::string());
+
+	R3000SymbolGuardian.ShutdownWorkerThread();
+	R5900SymbolGuardian.ShutdownWorkerThread();
 }
 
 void VMManager::Internal::SetFileLogPath(std::string path)
@@ -659,11 +661,6 @@ void VMManager::LoadInputBindings(SettingsInterface& si, std::unique_lock<std::m
 			InputManager::ReloadBindings(si, *isi, si);
 			Host::Internal::SetInputSettingsLayer(s_input_settings_interface.get(), lock);
 		}
-	}
-	else if (SettingsInterface* gsi = Host::Internal::GetGameSettingsLayer();
-			 gsi && gsi->GetBoolValue("Pad", "UseGameSettingsForController", false))
-	{
-		InputManager::ReloadBindings(si, *gsi, si);
 	}
 	else
 	{
@@ -1133,9 +1130,6 @@ void VMManager::HandleELFChange(bool verbose_patches_if_changed)
 	Console.WriteLn(Color_StrongOrange, fmt::format("ELF changed, active CRC {:08X} ({})", crc_to_report, s_elf_path));
 	Patch::ReloadPatches(s_disc_serial, crc_to_report, false, false, false, verbose_patches_if_changed);
 	ApplyCoreSettings();
-
-	MIPSAnalyst::ScanForFunctions(
-		R5900SymbolMap, s_elf_text_range.first, s_elf_text_range.first + s_elf_text_range.second, true);
 }
 
 void VMManager::UpdateELFInfo(std::string elf_path)
@@ -1159,6 +1153,25 @@ void VMManager::UpdateELFInfo(std::string elf_path)
 	s_elf_entry_point = elfo.GetEntryPoint();
 	s_elf_text_range = elfo.GetTextRange();
 	s_elf_path = std::move(elf_path);
+
+	R5900SymbolGuardian.Reset();
+
+	// Search for a .sym file to load symbols from.
+	std::string nocash_path;
+	CDVD_SourceType source_type = CDVDsys_GetSourceType();
+	if (source_type == CDVD_SourceType::Iso)
+	{
+		std::string iso_file_path = CDVDsys_GetFile(source_type);
+
+		std::string::size_type n = iso_file_path.rfind('.');
+		if (n == std::string::npos)
+			nocash_path = iso_file_path + ".sym";
+		else
+			nocash_path = iso_file_path.substr(0, n) + ".sym";
+	}
+
+	// Load the symbols stored in the ELF file.
+	R5900SymbolGuardian.ImportElf(elfo.ReleaseData(), s_elf_path, nocash_path);
 }
 
 void VMManager::ClearELFInfo()
@@ -2370,8 +2383,7 @@ inline void LogUserPowerPlan()
 }
 #endif
 
-#if 0
-#if defined(__linux__) || defined(_WIN32)
+#if defined(_WIN32)
 void LogGPUCapabilities()
 {
 	Console.WriteLn(Color_StrongBlack, "Graphics Adapters Detected:");
@@ -2484,7 +2496,6 @@ void LogGPUCapabilities()
 #endif
 }
 #endif
-#endif
 
 void VMManager::LogCPUCapabilities()
 {
@@ -2532,7 +2543,7 @@ void VMManager::LogCPUCapabilities()
 	}
 #endif
 
-#if 0
+#if defined(_WIN32)
 	LogGPUCapabilities();
 #endif
 }
@@ -3612,7 +3623,7 @@ void VMManager::UpdateDiscordPresence(bool update_session_time)
 	rp.largeImageKey = "4k-pcsx2";
 	rp.largeImageText = "PCSX2 Emulator";
 	rp.startTimestamp = s_discord_presence_time_epoch;
-	rp.details = s_title.empty() ? "No Game Running" : s_title.c_str();
+	rp.details = s_title.empty() ?  TRANSLATE("VMManager","No Game Running") : s_title.c_str();
 
 	std::string state_string;
 	if (Achievements::HasRichPresence())
